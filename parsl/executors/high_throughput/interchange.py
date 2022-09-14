@@ -459,11 +459,18 @@ class Interchange(object):
                 interesting=len(interesting_managers)))
 
             if interesting_managers and not self.pending_task_queue.empty():
-                shuffled_managers = list(interesting_managers)
-                random.shuffle(shuffled_managers)
+                list_managers = list(interesting_managers)
 
-                while shuffled_managers and not self.pending_task_queue.empty():  # cf. the if statement above...
-                    manager_id = shuffled_managers.pop()
+                while list_managers and not self.pending_task_queue.empty():  # cf. the if statement above...
+                    # Picking manager based on cpu core speed
+                    max_core_speed = 0
+                    picked_manager_id = None
+                    for potential_manager_id in list_managers:
+                        if self._ready_manager_queue[potential_manager_id]['cpu_speed'] > max_core_speed
+                            max_core_speed = self._ready_manager_queue[potential_manager_id]['cpu_speed']
+                            picked_manager_id = potential_manager_id
+                    
+                    manager_id = picked_manager_id
                     m = self._ready_managers[manager_id]
                     tasks_inflight = len(m['tasks'])
                     real_capacity = min(m['free_capacity'],
