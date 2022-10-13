@@ -449,7 +449,7 @@ class Interchange(object):
                     max_core_speed = 0
                     picked_manager_id = None
                     for potential_manager_id in list_managers:
-                        if self._ready_manager_queue[potential_manager_id]['cpu_speed'] > max_core_speed
+                        if (self._ready_manager_queue[potential_manager_id]['cpu_speed'] > max_core_speed):
                             max_core_speed = self._ready_manager_queue[potential_manager_id]['cpu_speed']
                             picked_manager_id = potential_manager_id
                     
