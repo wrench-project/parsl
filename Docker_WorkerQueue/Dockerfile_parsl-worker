@@ -1,0 +1,22 @@
+# Use official miniconda runtime as a parent image
+FROM continuumio/miniconda:latest
+
+# Set config so that conda will auto activate
+RUN conda config --set auto_activate_base true
+
+# Install required package to run work_queue_worker
+RUN conda install -y -c conda-forge --strict-channel-priority python ndcctools
+
+# Create the user worker inside of container
+RUN adduser --disabled-password --gecos '' worker
+
+# Set the working directory to /home
+WORKDIR /home/worker
+
+# Set a user
+USER worker
+
+# Entrypoint to start work_queue_worker
+ENTRYPOINT ["/bin/bash", "work_queue_worker", ]
+
+

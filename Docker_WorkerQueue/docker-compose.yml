@@ -1,0 +1,78 @@
+version: '3.2'
+services:
+
+  parsl-master:
+    image: TBD
+    container_name: parsl-master
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/home/parsl
+    networks:
+      - parsl-network
+    stdin_open: true
+    tty: true
+
+  # spark-submit:
+  #   image: henricasanova/ics632_spark-submit
+  #   container_name: spark-submit
+  #   volumes:
+  #     - ./:/home/spark
+  #   networks:
+  #     - spark-network
+  #   stdin_open: true
+  #   tty: true
+
+  parsl-worker1:
+    image: TBD
+    container_name: parsl-worker1
+    depends_on: 
+      - parsl-master
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./:/home/parsl
+    networks:
+      - parsl-network
+
+  parsl-worker2:
+    image: TBD
+    container_name: parsl-worker2
+    depends_on: 
+      - parsl-master
+    ports:
+      - "8082:8081"
+    volumes:
+      - ./:/home/parsl
+    networks:
+      - parsl-network
+
+  parsl-worker3:
+    image: TBD
+    container_name: parsl-worker3
+    depends_on: 
+      - parsl-master
+    ports:
+      - "8083:8081"
+    volumes:
+      - ./:/home/parsl
+    networks:
+      - parsl-network
+
+  parsl-worker4:
+    image: TBD
+    container_name: parsl-worker4
+    depends_on: 
+      - parsl-master
+    ports:
+      - "8084:8081"
+    volumes:
+      - ./:/home/parsl
+    networks:
+      - parsl-network
+
+networks:
+  parsl-network:
+    name: parsl-network
+    driver: bridge
+
