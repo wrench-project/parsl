@@ -1,0 +1,21 @@
+# Use official miniconda runtime as a parent image
+FROM continuumio/miniconda3:latest
+
+# Set config so that conda will auto activate
+RUN conda config --set auto_activate_base true
+
+
+# Install parsl
+RUN pip install parsl
+
+# Add parsl WorkQueue Executor script (work in progress)
+COPY work_queue_master.py /home/master
+
+# Create the user worker inside of container
+RUN adduser --disabled-password --gecos '' worker
+
+# Set the working directory to /home
+WORKDIR /home/master
+
+# Set a user
+USER master

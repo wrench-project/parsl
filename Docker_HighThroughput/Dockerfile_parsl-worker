@@ -1,0 +1,47 @@
+# Use official miniconda runtime as a parent image
+FROM continuumio/miniconda3:latest
+
+# Set config so that conda will auto activate
+RUN conda config --set auto_activate_base true
+
+RUN conda install -c anaconda python=3.8
+
+# Install parsl
+RUN pip install parsl
+
+# # Create the user worker inside of container
+# RUN adduser --disabled-password --gecos '' worker
+
+# Set the working directory to /home
+WORKDIR /home/worker
+
+COPY process_worker_pool.py /home/worker/process_worker_pool.py
+
+# # Set a user
+# USER worker
+
+# Entrypoint to start work_queue_worker
+ENTRYPOINT ["/bin/bash"]
+
+
+
+# process_worker_pool.py {debug} {max_workers} "
+                #    "-a {addresses} "
+                #    "-p {prefetch_capacity} "
+                #    "-c {cores_per_worker} "
+                #    "-m {mem_per_worker} "
+                #    "--poll {poll_period} "
+                #    "--task_port={task_port} "
+                #    "--result_port={result_port} "
+                #    "--logdir={logdir} "
+                #    "--block_id={{block_id}} "
+                #    "--hb_period={heartbeat_period} "
+                #    "{address_probe_timeout_string} "
+                #    "--hb_threshold={heartbeat_threshold} "
+                #    "--cpu-affinity {cpu_affinity} "
+                #    "--available-accelerators {accelerators} "
+                #    "--start-method {start_method}")
+
+
+# python process_worker_pool.py --debug  -a 172.20.48.26,127.0.0.1,141.239.134.121,DESKTOP-Q0GTJ8M -p 0 -c 1 -m None --poll 10 --task_port=54195 --result_port=54103 --logdir=/home/wongy/wrench/parsl/docker_tests/runinfo/005/htex_Local --block_id=0 --hb_period=30  --hb_threshold=120 --cpu-affinity none --available-accelerators  --start-method fork
+
