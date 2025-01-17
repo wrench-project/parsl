@@ -1,0 +1,35 @@
+version: '3'
+services:
+  container1:
+    image: parsl-worker
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+    ports:
+      - "2201:22"
+  container2:
+    image: parsl-worker
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+    ports:
+      - "2202:22"
+  container3:
+    image: parsl-worker
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+    ports:
+      - "2203:22"
+  container4:
+    image: parsl-worker
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+    ports:
+      - "2204:22"
+
