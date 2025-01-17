@@ -660,7 +660,8 @@ class HighThroughputExecutor(BlockProviderExecutor, RepresentationMixin, UsageIn
               Future
         """
 
-        validate_resource_spec(resource_specification, self.enable_mpi_mode)
+        # NOTE: no need to valide resource_spec, we are using it to pass parameters for scheduling
+        # validate_resource_spec(resource_specification, self.enable_mpi_mode)
 
         if self.bad_state_is_set:
             raise self.executor_exception
@@ -684,7 +685,7 @@ class HighThroughputExecutor(BlockProviderExecutor, RepresentationMixin, UsageIn
         except TypeError:
             raise SerializationError(func.__name__)
 
-        msg = {"task_id": task_id, "buffer": fn_buf}
+        msg = {"task_id": task_id, "buffer": fn_buf, "resource_specification": resource_specification}
 
         # Post task to the outgoing queue
         self.outgoing_q.put(msg)

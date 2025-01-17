@@ -408,6 +408,10 @@ class Interchange:
                 logger.error(f"JSON message was not correctly formatted from manager: {manager_id!r}")
                 logger.debug("Message: \n{!r}\n".format(message[1]))
                 return
+            
+
+            logger.info("Received message from manager: {!r}".format(manager_id))
+            logger.info("Message: {!r}".format(msg))
 
             if msg['type'] == 'registration':
                 # We set up an entry only if registration works correctly
@@ -421,6 +425,7 @@ class Interchange:
                                                     'draining': False,
                                                     'parsl_version': msg['parsl_v'],
                                                     'python_version': msg['python_v'],
+                                                    'cpu_speed': msg['cpu_speed'],
                                                     'tasks': []}
                 self.connected_block_history.append(msg['block_id'])
 
@@ -489,6 +494,7 @@ class Interchange:
             interesting=len(interesting_managers)))
 
         if interesting_managers and not self.pending_task_queue.empty():
+            # Add a new manager_selector to implement cluster-based scheduling
             shuffled_managers = self.manager_selector.sort_managers(self._ready_managers, interesting_managers)
 
             while shuffled_managers and not self.pending_task_queue.empty():  # cf. the if statement above...
@@ -496,6 +502,8 @@ class Interchange:
                 m = self._ready_managers[manager_id]
                 tasks_inflight = len(m['tasks'])
                 real_capacity = m['max_capacity'] - tasks_inflight
+
+                logger.info(f"Manager's cpu_speed: {m['cpu_speed']}")
 
                 if (real_capacity and m['active'] and not m['draining']):
                     tasks = self.get_tasks(real_capacity)

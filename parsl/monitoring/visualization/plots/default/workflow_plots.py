@@ -211,7 +211,7 @@ dag_state_colors = {"unsched": (0, 'rgb(240, 240, 240)'),
                     "memo_done": (7, 'rgb(64, 200, 64)'),
                     "fail_retryable": (8, 'rgb(200, 128,128)'),
                     "joining": (9, 'rgb(128, 128, 255)'),
-                    "running_ended": (10, 'rgb(64, 64, 255)')
+                    "running_ended": (10, 'rgb(64, 255, 64)')
                     }
 
 

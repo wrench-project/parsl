@@ -18,3 +18,4 @@ class ManagerRecord(TypedDict, total=False):
     timestamp: datetime
     parsl_version: str
     python_version: str
+    cpu_speed: float
