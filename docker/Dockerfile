@@ -25,10 +25,15 @@ COPY ./wfbench /usr/local/bin
 
 RUN cd /usr/local/bin && make && cd ~
 
-
 RUN conda install -y pandas pathos
 
+COPY ./entry.sh /root
+
+RUN chmod +x /root/entry.sh
+
 FROM base AS builder
+
+ARG CACHEBUST=1
 
 # Install parsl
 RUN git clone --depth 1 --branch scheduling_using_simulation https://github.com/jeff-yc-wong/parsl.git
@@ -38,5 +43,4 @@ RUN pip install parsl/
 # RUN git clone --depth 1 --branch feature/wfbench_updates https://github.com/wfcommons/WfCommons.git
 # RUN pip install WfCommons/
 
-CMD ["/usr/sbin/sshd", "-D"]
-
+ENTRYPOINT ["/root/entry.sh"]
