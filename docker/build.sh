@@ -1,1 +1,1 @@
-docker build -t parsl-worker .
+docker build --target builder -t parsl-worker .

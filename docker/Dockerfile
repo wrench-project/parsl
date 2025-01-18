@@ -1,17 +1,9 @@
-FROM continuumio/miniconda3
+FROM continuumio/miniconda3 AS base
 
 # Install dependencies
 RUN apt-get update && apt-get install -y openssh-server stress-ng build-essential
 
 RUN conda install -y python==3.12.8
-
-# Install parsl
-RUN git clone --depth 1 --branch scheduling_using_simulation https://github.com/jeff-yc-wong/parsl.git
-RUN pip install parsl/
-
-# Intall WfCommons
-RUN git clone --depth 1 --branch feature/wfbench_updates https://github.com/wfcommons/WfCommons.git
-RUN pip install WfCommons/
 
 # Configure SSH server
 RUN mkdir /var/run/sshd
@@ -25,7 +17,26 @@ WORKDIR /root
 COPY ./id_rsa.pub /root/.ssh/authorized_keys
 
 RUN chmod 700 ~/.ssh
-RUN chmod 600 ~/.ssh/authorized_keys 
+RUN chmod 600 ~/.ssh/authorized_keys
+
+COPY ./Makefile /usr/local/bin
+COPY ./cpu-benchmark.cpp /usr/local/bin
+COPY ./wfbench /usr/local/bin
+
+RUN cd /usr/local/bin && make && cd ~
+
+
+RUN conda install -y pandas pathos
+
+FROM base AS builder
+
+# Install parsl
+RUN git clone --depth 1 --branch scheduling_using_simulation https://github.com/jeff-yc-wong/parsl.git
+RUN pip install parsl/
+
+# Intall WfCommons
+# RUN git clone --depth 1 --branch feature/wfbench_updates https://github.com/wfcommons/WfCommons.git
+# RUN pip install WfCommons/
 
 CMD ["/usr/sbin/sshd", "-D"]
 
