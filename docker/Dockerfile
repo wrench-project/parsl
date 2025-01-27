@@ -21,7 +21,6 @@ RUN chmod 600 ~/.ssh/authorized_keys
 
 COPY ./Makefile /usr/local/bin
 COPY ./cpu-benchmark.cpp /usr/local/bin
-COPY ./wfbench /usr/local/bin
 
 RUN cd /usr/local/bin && make && cd ~
 
@@ -34,6 +33,8 @@ RUN chmod +x /root/entry.sh
 FROM base AS builder
 
 ARG CACHEBUST=1
+
+COPY ./wfbench /usr/local/bin
 
 # Install parsl
 RUN git clone --depth 1 --branch scheduling_using_simulation https://github.com/jeff-yc-wong/parsl.git

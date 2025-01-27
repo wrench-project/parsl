@@ -1123,7 +1123,14 @@ class DataFlowKernel:
             except Exception as e:
                 logger.error("add_done_callback got an exception {} which will be ignored".format(e))
 
-        self.launch_if_ready(task_record)
+        # self.launch_if_ready(task_record)
+
+        if task_record['func_name'] == 'barrier':
+            self.launch_if_ready(task_record)
+            for task_def in self.tasks.values():
+                if task_def['func_name'] != 'barrier':
+                    self.launch_if_ready(task_def)
+                    logger.info(f"JEFF: Launching {task_def['func_name']}")
 
         return app_fu
 
