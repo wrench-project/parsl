@@ -26,9 +26,9 @@ RUN cd /usr/local/bin && make && cd ~
 
 RUN conda install -y pandas pathos
 
-COPY ./entry.sh /root
+COPY ./entry.sh /bin
 
-RUN chmod +x /root/entry.sh
+RUN chmod +x /bin/entry.sh
 
 FROM base AS builder
 
@@ -44,4 +44,4 @@ RUN pip install parsl/
 # RUN git clone --depth 1 --branch feature/wfbench_updates https://github.com/wfcommons/WfCommons.git
 # RUN pip install WfCommons/
 
-ENTRYPOINT ["/root/entry.sh"]
+ENTRYPOINT ["/bin/entry.sh"]
