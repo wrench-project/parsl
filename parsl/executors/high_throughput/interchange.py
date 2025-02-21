@@ -18,7 +18,7 @@ from parsl import curvezmq
 from parsl.app.errors import RemoteExceptionWrapper
 from parsl.executors.high_throughput.errors import ManagerLost, VersionMismatch
 from parsl.executors.high_throughput.manager_record import ManagerRecord
-from parsl.executors.high_throughput.manager_selector import ManagerSelector
+from parsl.executors.high_throughput.manager_selector import ManagerSelector, MostIdleSelector, RandomManagerSelector, FastestManagerSelector
 from parsl.monitoring.message_type import MessageType
 from parsl.monitoring.radios import MonitoringRadioSender, ZMQRadioSender
 from parsl.process_loggers import wrap_with_logs
@@ -177,7 +177,8 @@ class Interchange:
 
         logger.info("Platform info: {}".format(self.current_platform))
 
-    def get_tasks(self, count: int) -> Sequence[dict]:
+    # TODO: JEFF - ADD A PARAMETER TO THIS FUNCTION THAT SPECIFY THE PARAMETER FOR TASK SELECTION
+    def get_tasks(self, param: str = None) -> Sequence[dict]:
         """ Obtains a batch of tasks from the internal pending_task_queue
 
         Parameters
@@ -191,15 +192,42 @@ class Interchange:
             eg. [{'task_id':<x>, 'buffer':<buf>} ... ]
         """
         tasks = []
-        for _ in range(0, count):
-            try:
-                x = self.pending_task_queue.get(block=False)
-            except queue.Empty:
-                break
-            else:
-                tasks.append(x)
+        pending_task_list = list(self.pending_task_queue.queue)
+
+        if len(pending_task_list) == 0:
+            return tasks
+        
+        task, task_list = self.pop_task_by_param(pending_task_list, param)
+
+        tasks.append(task)
+
+        self.pending_task_queue.queue = task_list
 
         return tasks
+
+    def pop_task_by_param(self, tasks: list, param: str | None):
+        """Sorts the tasks based on the parameter specified
+
+        Parameters
+        ----------
+        tasks: list
+            List of tasks to be sorted
+        param: str
+            The parameter based on which the tasks should be sorted
+
+        Returns
+        -------
+        List of sorted tasks by parameter
+        """
+        if not param:
+            largest = tasks.pop(0)
+            return largest, tasks
+        else:
+            largest = max(tasks, key=lambda x: x["resource_specification"][param])
+
+            tasks.pop(tasks.index(largest))
+
+            return largest, tasks
 
     @wrap_with_logs(target="interchange")
     def task_puller(self) -> NoReturn:
@@ -486,6 +514,16 @@ class Interchange:
                 m['active'] = False
                 self._send_monitoring_info(monitoring_radio, m)
 
+    def pick_scheduling_algorithm(self) -> str:
+        possible_task_params = [None, "data_size", "computation", "num_children", "bottom_level"]
+        possible_managers = [RandomManagerSelector(), MostIdleSelector(), FastestManagerSelector()]
+
+        #TODO: WORKFLOW SIMULATION - PICK A PARAMETER TO SORT THE TASKS AND MANAGERS
+
+        self.manager_selector = possible_managers[0]
+
+        return possible_task_params[0]
+
     def process_tasks_to_send(self, interesting_managers: Set[bytes]) -> None:
         # Check if there are tasks that could be sent to managers
 
@@ -495,6 +533,8 @@ class Interchange:
 
         if interesting_managers and not self.pending_task_queue.empty():
             # Add a new manager_selector to implement cluster-based scheduling
+            param = self.pick_scheduling_algorithm()
+
             shuffled_managers = self.manager_selector.sort_managers(self._ready_managers, interesting_managers)
 
             while shuffled_managers and not self.pending_task_queue.empty():  # cf. the if statement above...
@@ -506,7 +546,7 @@ class Interchange:
                 logger.info(f"Manager's cpu_speed: {m['cpu_speed']}")
 
                 if (real_capacity and m['active'] and not m['draining']):
-                    tasks = self.get_tasks(real_capacity)
+                    tasks = self.get_tasks(param=param)
                     if tasks:
                         self.task_outgoing.send_multipart([manager_id, b'', pickle.dumps(tasks)])
                         task_count = len(tasks)
