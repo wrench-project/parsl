@@ -172,6 +172,8 @@ class ParslTranslator(Translator):
                 codelines.extend(code)
 
         cleanup_code = [
+            "print('Starting workflow...'",
+            "start_time = time.perf_counter()",
             "barrier()",
             "",
             "try:",
@@ -183,6 +185,7 @@ class ParslTranslator(Translator):
             "    raise e",
             "else:",
             "    print('Workflow completed successfully')",
+            "    print('Time Taken: ', time.perf_counter() - start_time)",
             "finally:",
             "    # Releasing all resources, and shutting down all executors and workers",
             "    parsl.dfk().cleanup()",
@@ -200,7 +203,7 @@ def get_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "wfformat_file", help="path to WfFormat JSON input file")
-    parser.add_argument("--outdir", default=pathlib.Path.cwd().joinpath("output"),
+    parser.add_argument("--outdir", default=pathlib.Path.cwd().joinpath("parsl_script"),
                         help="Output directory in which to store the translated files")
 
     return parser
