@@ -253,6 +253,7 @@ class Manager:
             self.worker_count = min(len(self.available_accelerators), self.worker_count)
         logger.info("Manager will spawn {} workers".format(self.worker_count))
 
+    # TODO: gonna register cpu_speed
     def create_reg_message(self):
         """ Creates a registration message to identify the worker to the interchange
         """
@@ -272,6 +273,7 @@ class Manager:
                'dir': os.getcwd(),
                'cpu_count': psutil.cpu_count(logical=False),
                'total_memory': psutil.virtual_memory().total,
+               'cpu_speed': psutil.cpu_freq()[0] if psutil.cpu_freq() else os.environ.get("CPU_SPEED", "1")
                }
         b_msg = json.dumps(msg).encode('utf-8')
         return b_msg

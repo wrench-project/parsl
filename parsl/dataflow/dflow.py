@@ -1039,6 +1039,14 @@ class DataFlowKernel:
                        'try_time_launched': None,
                        'try_time_returned': None,
                        'resource_specification': resource_specification}
+        
+        if task_record['func_name'] == 'barrier':
+            for task_def in self.tasks.values():
+                if task_def['func_name'] != 'barrier':
+                    self.launch_if_ready(task_def)
+                    logger.info(f"JEFF: Launching {task_def['func_name']}")
+
+            return 0
 
         self.update_task_state(task_record, States.unsched)
 
@@ -1123,7 +1131,9 @@ class DataFlowKernel:
             except Exception as e:
                 logger.error("add_done_callback got an exception {} which will be ignored".format(e))
 
-        self.launch_if_ready(task_record)
+        # self.launch_if_ready(task_record)
+
+
 
         return app_fu
 
@@ -1169,7 +1179,7 @@ class DataFlowKernel:
                 parent, child = pathlib.Path(run_dir).parts[-2:]
                 remote_run_dir = os.path.join(parent, child)
                 channel.script_dir = os.path.join(remote_run_dir, 'remote_submit_scripts')
-                provider.script_dir = os.path.join(run_dir, 'local_submit_scripts')
+                provider.script_dir = os.path.join(run_dir, 'submit_scripts')
 
         channel.makedirs(channel.script_dir, exist_ok=True)
 

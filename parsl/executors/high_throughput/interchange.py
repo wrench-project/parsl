@@ -10,6 +10,7 @@ import signal
 import sys
 import threading
 import time
+import subprocess
 from typing import Any, Dict, List, NoReturn, Optional, Sequence, Set, Tuple, cast
 
 import zmq
@@ -18,7 +19,7 @@ from parsl import curvezmq
 from parsl.app.errors import RemoteExceptionWrapper
 from parsl.executors.high_throughput.errors import ManagerLost, VersionMismatch
 from parsl.executors.high_throughput.manager_record import ManagerRecord
-from parsl.executors.high_throughput.manager_selector import ManagerSelector
+from parsl.executors.high_throughput.manager_selector import ManagerSelector, MostIdleSelector, RandomManagerSelector, FastestManagerSelector
 from parsl.monitoring.message_type import MessageType
 from parsl.monitoring.radios import MonitoringRadioSender, ZMQRadioSender
 from parsl.process_loggers import wrap_with_logs
@@ -31,6 +32,7 @@ PKL_DRAINED_CODE = pickle.dumps((2 ** 32) - 2)
 
 LOGGER_NAME = "interchange"
 logger = logging.getLogger(LOGGER_NAME)
+my_logger = logging.getLogger("debug")
 
 
 class Interchange:
@@ -104,7 +106,7 @@ class Interchange:
         self.logdir = logdir
         os.makedirs(self.logdir, exist_ok=True)
 
-        start_file_logger("{}/interchange.log".format(self.logdir), level=logging_level)
+        start_file_logger("{}/".format(self.logdir), level=logging_level)
         logger.propagate = False
         logger.debug("Initializing Interchange process")
 
@@ -134,6 +136,8 @@ class Interchange:
         self.pending_task_queue: queue.Queue[Any] = queue.Queue(maxsize=10 ** 6)
         self.count = 0
 
+        self.param = None
+
         self.worker_ports = worker_ports
         self.worker_port_range = worker_port_range
 
@@ -141,6 +145,9 @@ class Interchange:
         self.task_outgoing.set_hwm(0)
         self.results_incoming = self.zmq_context.socket(zmq.ROUTER)
         self.results_incoming.set_hwm(0)
+
+        self.ongoing_tasks = {}
+        self.done_tasks = {}
 
         if self.worker_ports:
             self.worker_task_port = self.worker_ports[0]
@@ -177,7 +184,8 @@ class Interchange:
 
         logger.info("Platform info: {}".format(self.current_platform))
 
-    def get_tasks(self, count: int) -> Sequence[dict]:
+    # TODO: JEFF - ADD A PARAMETER TO THIS FUNCTION THAT SPECIFY THE PARAMETER FOR TASK SELECTION
+    def get_tasks(self, param: str = None) -> Sequence[dict]:
         """ Obtains a batch of tasks from the internal pending_task_queue
 
         Parameters
@@ -190,16 +198,46 @@ class Interchange:
         List of upto count tasks. May return fewer than count down to an empty list
             eg. [{'task_id':<x>, 'buffer':<buf>} ... ]
         """
-        tasks = []
-        for _ in range(0, count):
-            try:
-                x = self.pending_task_queue.get(block=False)
-            except queue.Empty:
-                break
-            else:
-                tasks.append(x)
+        with self.pending_task_queue.mutex:
+            tasks = []
+            pending_task_list = list(self.pending_task_queue.queue)
+
+            if len(pending_task_list) == 0:
+                return tasks
+            
+            task, task_list = self.pop_task_by_param(pending_task_list, param)
+
+            tasks.append(task)
+
+            self.pending_task_queue.queue = task_list
 
         return tasks
+
+    def pop_task_by_param(self, tasks: list, param: str | None):
+        """Sorts the tasks based on the parameter specified
+
+        Parameters
+        ----------
+        tasks: list
+            List of tasks to be sorted
+        param: str
+            The parameter based on which the tasks should be sorted
+
+        Returns
+        -------
+        List of sorted tasks by parameter
+        """
+        if not param:
+            largest = tasks.pop(0)
+            return largest, tasks
+        else:
+            sorted_tasks = sorted(tasks, key=lambda x: x["resource_specification"]['task_name'])
+
+            largest = max(sorted_tasks, key=lambda x: x["resource_specification"][param])
+
+            tasks.pop(tasks.index(largest))
+
+            return largest, tasks
 
     @wrap_with_logs(target="interchange")
     def task_puller(self) -> NoReturn:
@@ -408,6 +446,10 @@ class Interchange:
                 logger.error(f"JSON message was not correctly formatted from manager: {manager_id!r}")
                 logger.debug("Message: \n{!r}\n".format(message[1]))
                 return
+            
+
+            logger.info("Received message from manager: {!r}".format(manager_id))
+            logger.info("Message: {!r}".format(msg))
 
             if msg['type'] == 'registration':
                 # We set up an entry only if registration works correctly
@@ -421,6 +463,7 @@ class Interchange:
                                                     'draining': False,
                                                     'parsl_version': msg['parsl_v'],
                                                     'python_version': msg['python_v'],
+                                                    'cpu_speed': msg['cpu_speed'],
                                                     'tasks': []}
                 self.connected_block_history.append(msg['block_id'])
 
@@ -435,6 +478,7 @@ class Interchange:
                 m.update(msg)  # type: ignore[typeddict-item]
 
                 logger.info("Registration info for manager {!r}: {}".format(manager_id, msg))
+                my_logger.info("\033[34mRegistration info for manager {!r}: {}\033[0m".format(manager_id, msg))
                 self._send_monitoring_info(monitoring_radio, m)
 
                 if (msg['python_v'].rsplit(".", 1)[0] != self.current_platform['python_v'].rsplit(".", 1)[0] or
@@ -481,6 +525,50 @@ class Interchange:
                 m['active'] = False
                 self._send_monitoring_info(monitoring_radio, m)
 
+    def pick_scheduling_algorithm(self) -> str:
+        possible_task_params = [None, "data_size", "computation", "num_children", "bottom_level"]
+        possible_managers = [RandomManagerSelector(), MostIdleSelector(), FastestManagerSelector()]
+
+        # INPUT: TASKS STATES, WFFORMAT FILE
+        # OUTPUT: SELECTED ALGORITHM
+
+        #TODO: keey track of tasks submission history
+        # Ongoing tasks and how far back they started
+        # List of done tasks
+
+        my_logger.debug(f"\033[32mJEFF: list of pending tasks: {len(self.pending_task_queue.queue)}\033[0m")
+        my_logger.debug(f"\033[33mJEFF: list of ongoing tasks: {len(self.ongoing_tasks)}\033[0m")
+        my_logger.debug(f"\033[33mJEFF: list of done tasks: {len(self.done_tasks)}\033[0m")
+
+        ongoing_tasks = []
+        done_tasks = []
+
+        for _, task in self.ongoing_tasks.items():
+            temp = {
+                'task': task['task'],
+                'worker': task['worker'],
+                'how_far_back': round(time.time() - task['start_time'], 4)
+            }
+
+            ongoing_tasks.append(temp)
+
+        for _, task in self.done_tasks.items():
+            done_tasks.append(task['task'])
+
+        my_logger.debug(f"\033[33mJEFF: Simulator input ongoing_tasks: {ongoing_tasks}\033[0m")
+        my_logger.debug(f"\033[33mJEFF: Simulator input done_tasks: {done_tasks}\033[0m\n")
+
+
+        #TODO: WORKFLOW SIMULATION - PICK A PARAMETER TO SORT THE TASKS AND MANAGERS
+
+        # cmd = [""]
+        # sim_process = subprocess.run(cmd, capture_output=True, text=True)
+
+        self.manager_selector = possible_managers[0]
+        self.param = possible_task_params[0]
+
+        return possible_task_params[0]
+
     def process_tasks_to_send(self, interesting_managers: Set[bytes]) -> None:
         # Check if there are tasks that could be sent to managers
 
@@ -489,6 +577,9 @@ class Interchange:
             interesting=len(interesting_managers)))
 
         if interesting_managers and not self.pending_task_queue.empty():
+            # Add a new manager_selector to implement cluster-based scheduling
+            self.pick_scheduling_algorithm()
+
             shuffled_managers = self.manager_selector.sort_managers(self._ready_managers, interesting_managers)
 
             while shuffled_managers and not self.pending_task_queue.empty():  # cf. the if statement above...
@@ -497,8 +588,18 @@ class Interchange:
                 tasks_inflight = len(m['tasks'])
                 real_capacity = m['max_capacity'] - tasks_inflight
 
+                logger.info(f"Manager's cpu_speed: {m['cpu_speed']}")
+
                 if (real_capacity and m['active'] and not m['draining']):
-                    tasks = self.get_tasks(real_capacity)
+                    tasks = self.get_tasks(param=self.param) # technically should only contain 1 task
+
+                    task_obj = {
+                        'task': tasks[0]['resource_specification']['task_name'],
+                        'worker': m['hostname'],
+                        'start_time': time.time()
+                    }
+
+                    self.ongoing_tasks[tasks[0]['task_id']] = task_obj
                     if tasks:
                         self.task_outgoing.send_multipart([manager_id, b'', pickle.dumps(tasks)])
                         task_count = len(tasks)
@@ -561,6 +662,11 @@ class Interchange:
                         got_result = True
                         try:
                             logger.debug(f"Removing task {r['task_id']} from manager record {manager_id!r}")
+
+                            # JEFF: log the end time of a task
+                            self.ongoing_tasks[r['task_id']]['end_time'] = time.time()
+                            self.done_tasks[r['task_id']] = self.ongoing_tasks.pop(r['task_id'])
+                            my_logger.info(f"\033[34mTask done: {self.done_tasks[r['task_id']]}\033[0m")
                             m['tasks'].remove(r['task_id'])
                         except Exception:
                             # If we reach here, there's something very wrong.
@@ -614,7 +720,7 @@ class Interchange:
                 interesting_managers.remove(manager_id)
 
 
-def start_file_logger(filename: str, level: int = logging.DEBUG, format_string: Optional[str] = None) -> None:
+def start_file_logger(filepath: str, level: int = logging.DEBUG, format_string: Optional[str] = None) -> None:
     """Add a stream log handler.
 
     Parameters
@@ -642,13 +748,22 @@ def start_file_logger(filename: str, level: int = logging.DEBUG, format_string: 
         )
 
     global logger
+    global my_logger
     logger = logging.getLogger(LOGGER_NAME)
+    my_logger = logging.getLogger("debug")
     logger.setLevel(level)
-    handler = logging.FileHandler(filename)
+    my_logger.setLevel(level)
+    handler = logging.FileHandler(filepath + "interchange.log")
     handler.setLevel(level)
     formatter = logging.Formatter(format_string, datefmt='%Y-%m-%d %H:%M:%S')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+    handler = logging.FileHandler(filepath + "debug.log")
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(format_string, datefmt='%Y-%m-%d %H:%M:%S')
+    handler.setFormatter(formatter)
+    my_logger.addHandler(handler)
 
 
 if __name__ == "__main__":

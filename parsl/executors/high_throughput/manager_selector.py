@@ -16,10 +16,22 @@ class ManagerSelector(metaclass=ABCMeta):
         """
         pass
 
-
 class RandomManagerSelector(ManagerSelector):
-
     def sort_managers(self, ready_managers: Dict[bytes, ManagerRecord], manager_list: Set[bytes]) -> List[bytes]:
         c_manager_list = list(manager_list)
         random.shuffle(c_manager_list)
+        return c_manager_list
+
+class MostIdleSelector(ManagerSelector):
+    def sort_managers(self, ready_managers: Dict[bytes, ManagerRecord], manager_list: Set[bytes]) -> List[bytes]:
+        c_manager_list = list(manager_list)
+        c_manager_list.sort(key=lambda x: len(ready_managers[x]['hostname']))
+        c_manager_list.sort(key=lambda x: ready_managers[x]['max_capacity'] - len(ready_managers[x]['tasks']), reverse=True)
+        return c_manager_list
+
+class FastestManagerSelector(ManagerSelector):
+    def sort_managers(self, ready_managers: Dict[bytes, ManagerRecord], manager_list: Set[bytes]) -> List[bytes]:
+        c_manager_list = list(manager_list)
+        c_manager_list.sort(key=lambda x: len(ready_managers[x]['hostname']))
+        c_manager_list.sort(key=lambda x: ready_managers[x]['cpu_speed'])
         return c_manager_list
